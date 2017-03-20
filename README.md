@@ -1,6 +1,7 @@
 # kalliope-cli
 A simple shell to send orders to kalliope via the CLI
 
+![preview](preview.png)
 
 Installation
 
