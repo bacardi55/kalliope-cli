@@ -20,6 +20,7 @@ def main():
     login= 'admin'
     password = 'secret'
     history_file = '~/.kalliopecli_history'
+    no_voice_flag = "true"
 
 
     history_file = os.path.expanduser('~/.kalliopecli_history')
@@ -29,62 +30,74 @@ def main():
     readline.read_history_file(history_file)
     atexit.register(readline.write_history_file, history_file)
 
-    app = KalliopeCli(host, (login, password))
+    app = KalliopeCli(host, (login, password), no_voice_flag)
     app.debug = True
+    app.quiet = True
     app.echo = True
     app.cmdloop()
 
 
 class KalliopeCli(Cmd):
-    prompt = "KalliopeCLI> "
-    intro = "Welcome to Kalliopé ClI tool"
 
-    def __init__(self, host, credentials):
+    def __init__(self, host, credentials, no_voice_flag):
         Cmd.__init__(self)
 
         self.host = host
         self.credentials = credentials
+        self.no_voice_flag = no_voice_flag
+        self.settable.update({'no_voice_flag': 'If the no_voice flag should be used in the API parameters'})
 
-        # Get all orders
-        resp = requests.get(self.host + '/synapses', auth=self.credentials)
-        synapses = resp.json()
-        orders = []
-        for synapse in synapses['synapses']:
-            for signal in synapse['signals']:
-                orders.append(signal['order'])
+        self.prompt = self.colorize(self.colorize("Kalliope → ", "bold"), "blue")
+        self.intro = self.colorize("*** Welcome to Kalliopé ClI tool ***", "green")
+#        # Get all orders
+#        resp = requests.get(self.host + '/synapses', auth=self.credentials)
+#        synapses = resp.json()
+#
+#        orders = []
+#        for synapse in synapses['synapses']:
+#            for signal in synapse['signals']:
+#                if signal['name'] == "order":
+#                    orders.append(signal['parameters'])
+#
+#        self.orders = orders
+#        logging.debug(self.orders)
 
-        self.orders = orders
-        logging.debug(self.orders)
-
-    def do_help(self):
-        pass
-
-    def do_list(self):
-        pass
 
     def do_order(self, line):
-        if line:
-            resp = requests.post(self.host + '/synapses/start/order', auth = self.credentials, data = '{"order": "' + line + '"}', headers = {'Content-Type': 'application/json'})
-            if resp.status_code == 200:
-                print(self.colorize("200", "green"))
+        self.send_order(line)
+
+    def default(self, line):
+        self.send_order(line)
+
+    def send_order(self, order):
+        if order:
+            resp = requests.post(self.host + '/synapses/start/order', auth = self.credentials, data = '{"order": "' + order + '", "no_voice": "' + self.no_voice_flag + '"}', headers = {'Content-Type': 'application/json'})
+            if resp.status_code >= 200 and resp.status_code < 300:
+                values = resp.json()
+                orders = 'Matched orders: ' + ', '.join("%s" % (val) for (val) in self.get_matched_orders(values['matched_synapses']))
+                messages = 'Response: ' + ', '.join("%s" % (val) for (val) in self.get_generated_messages(values['matched_synapses']))
+                self.pfeedback(self.colorize(orders, 'cyan'))
+                self.poutput(self.colorize(self.colorize(messages, 'green'), 'bold'))
+
             else:
                 print(self.colorize(str(resp.status_code), "red"))
 
-    def complete_order(self, text, line, begidx, endidx):
-        command = line[len("order "):]
-        logging.debug(command)
+    def get_matched_orders(self, synapses):
+        orders = []
+        for synapse in synapses:
+            orders.append(synapse['matched_order'])
 
-        val = []
-        logging.debug(self.orders)
-        for order in self.orders:
-            if re.search(command, order, re.I):
-                val.append(order)
+        logging.debug(orders)
+        return orders
 
-        logging.debug(val)
-        if len(val) > 0:
-            return val
-        else:
-            return [text]
+    def get_generated_messages(self, synapses):
+        messages = []
+        for synapse in synapses:
+            for gm in synapse['neuron_module_list']:
+                messages.append(gm['generated_message'])
+
+        logging.debug(messages)
+        return messages
 
 if __name__ == '__main__':
     main()
