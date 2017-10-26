@@ -5,7 +5,7 @@ import os
 import atexit
 import readline
 import requests
-import re
+#import re
 
 from cmd2 import Cmd
 
@@ -16,7 +16,7 @@ def main():
     """
     Configuration
     """
-    host = 'http://localhost:5000'
+    host = 'http://kalliope:5000'
     login= 'admin'
     password = 'secret'
     history_file = '~/.kalliopecli_history'
@@ -32,7 +32,7 @@ def main():
 
     app = KalliopeCli(host, (login, password), no_voice_flag)
     app.debug = True
-    app.quiet = True
+    #app.quiet = True
     app.echo = True
     app.cmdloop()
 
@@ -46,21 +46,43 @@ class KalliopeCli(Cmd):
         self.credentials = credentials
         self.no_voice_flag = no_voice_flag
         self.settable.update({'no_voice_flag': 'If the no_voice flag should be used in the API parameters'})
+        self.limit_order_per_synapse = 1
+        self.settable.update({'limit_order_per_synapse': '0 for no limit, any numbers for limiting'})
 
         self.prompt = self.colorize(self.colorize("Kalliope → ", "bold"), "blue")
         self.intro = self.colorize("*** Welcome to Kalliopé ClI tool ***", "green")
-#        # Get all orders
-#        resp = requests.get(self.host + '/synapses', auth=self.credentials)
-#        synapses = resp.json()
-#
-#        orders = []
-#        for synapse in synapses['synapses']:
-#            for signal in synapse['signals']:
-#                if signal['name'] == "order":
-#                    orders.append(signal['parameters'])
-#
-#        self.orders = orders
-#        logging.debug(self.orders)
+
+        # TODO: test if kalliope is alive
+
+    def do_list(self, line):
+        # Get all orders
+        try:
+            resp = requests.get(self.host + '/synapses', auth=self.credentials)
+            synapses = resp.json()
+
+        except requests.exceptions.RequestException as e:
+            self.pfeedback(self.colorize("URL used: %s" % self.host + '/synapses', 'cyan'))
+            self.poutput(self.colorize(self.colorize('Error: Couldn\'t connect to Kalliope backend', 'red'), 'bold'))
+            logging.debug(e)
+            return
+
+        self.pfeedback(self.colorize('Limiting to %s order(s)' % self.limit_order_per_synapse, 'cyan'))
+        orders = []
+        for synapse in synapses['synapses']:
+            cptr = 0
+            for signal in synapse['signals']:
+                if signal['name'] == "order":
+                    orders.append(signal['parameters'])
+                    cptr = cptr + 1
+
+                    if (int(self.limit_order_per_synapse) > 0 and cptr >= int(self.limit_order_per_synapse)):
+                        break
+
+        self.orders = orders
+        logging.debug(self.orders)
+
+        for (key, order) in enumerate(orders):
+            self.poutput(self.colorize('Orders %s: %s' % (key, order), 'green'))
 
 
     def do_order(self, line):
