@@ -49,8 +49,8 @@ class KalliopeCli(Cmd):
         self.limit_order_per_synapse = 1
         self.settable.update({'limit_order_per_synapse': '0 for no limit, any numbers for limiting'})
 
-        self.prompt = self.colorize(self.colorize("Kalliope → ", "bold"), "blue")
         self.intro = self.colorize("*** Welcome to Kalliopé ClI tool ***", "green")
+        self.set_prompt()
 
         # TODO: test if kalliope is alive
 
@@ -85,6 +85,15 @@ class KalliopeCli(Cmd):
             self.poutput(self.colorize('Orders %s: %s' % (key, order), 'green'))
 
 
+    def do_mute(self, line):
+        self.mute_toggle("True")
+
+    def do_unmute(self, line):
+        self.mute_toggle("False")
+
+    def do_toggle_mute(self, line):
+        self.mute_toggle()
+
     def do_order(self, line):
         self.send_order(line)
 
@@ -93,7 +102,10 @@ class KalliopeCli(Cmd):
 
     def send_order(self, order):
         if order:
-            resp = requests.post(self.host + '/synapses/start/order', auth = self.credentials, data = '{"order": "' + order + '", "no_voice": "' + self.no_voice_flag + '"}', headers = {'Content-Type': 'application/json'})
+            resp = requests.post(self.host + '/synapses/start/order',
+                                 auth = self.credentials,
+                                 data = '{"order": "' + order + '", "no_voice": "' + self.no_voice_flag + '"}',
+                                 headers = {'Content-Type': 'application/json'})
             if resp.status_code >= 200 and resp.status_code < 300:
                 values = resp.json()
                 orders = 'Matched orders: ' + ', '.join("%s" % (val) for (val) in self.get_matched_orders(values['matched_synapses']))
@@ -120,6 +132,56 @@ class KalliopeCli(Cmd):
 
         logging.debug(messages)
         return messages
+
+    def get_mute_status(self):
+        try:
+            resp = requests.get(self.host + '/mute', auth=self.credentials)
+            status = resp.json()
+
+        except requests.exceptions.RequestException as e:
+            self.pfeedback(self.colorize("url used: %s" % self.host + '/synapses', 'cyan'))
+            self.poutput(self.colorize(self.colorize('error: couldn\'t connect to kalliope backend', 'red'), 'bold'))
+            logging.debug(e)
+            return False
+
+        return status['mute']
+
+    def mute_toggle(self, mute = 0):
+        if mute == 0 and self.get_mute_status() is True:
+            mute = 'False'
+        elif mute == 0:
+            mute = 'True'
+
+        logging.debug('mute: %s' % mute)
+
+        try:
+            resp = requests.post(self.host + '/mute',
+                                 auth = self.credentials,
+                                 data = '{"mute": "' + mute + '"}',
+                                 headers = {'Content-Type': 'application/json'})
+            response = resp.json()
+            logging.debug(response)
+
+        except requests.exceptions.RequestException as e:
+            self.pfeedback(self.colorize("url used: %s" % self.host + '/synapses', 'cyan'))
+            self.poutput(self.colorize(self.colorize('error: couldn\'t connect to kalliope backend', 'red'), 'bold'))
+            logging.debug(e)
+            return
+
+        status_txt = "muted" if mute == "True" else "unmuted"
+        self.poutput(self.colorize('Kalliope has been ' + status_txt, 'bold'))
+        self.set_prompt(True if mute == "True" else "False")
+
+    def set_prompt(self, new_status = -1):
+        logging.debug(new_status)
+        logging.debug(self.get_mute_status())
+        new_status = self.get_mute_status() if new_status == -1 else new_status
+
+        prompt = ''
+        if new_status == True:
+            prompt = '[MUTED] '
+
+        self.prompt = self.colorize(self.colorize(prompt + "Kalliope → ", "bold"), "blue")
 
 if __name__ == '__main__':
     main()
