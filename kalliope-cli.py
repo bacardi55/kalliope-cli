@@ -100,6 +100,12 @@ class KalliopeCli(Cmd):
     def default(self, line):
         self.send_order(line)
 
+    def postcmd(self, stop, line):
+        # Workaround for changing no_voice flag in prompt
+        if line.startswith('no_voice_flag'):
+            self.set_prompt()
+        return stop
+
     def send_order(self, order):
         if order:
             resp = requests.post(self.host + '/synapses/start/order',
@@ -173,13 +179,14 @@ class KalliopeCli(Cmd):
         self.set_prompt(True if mute == "True" else "False")
 
     def set_prompt(self, new_status = -1):
-        logging.debug(new_status)
-        logging.debug(self.get_mute_status())
         new_status = self.get_mute_status() if new_status == -1 else new_status
 
         prompt = ''
         if new_status == True:
             prompt = '[MUTED] '
+
+        if self.no_voice_flag == "true":
+            prompt = prompt + '[NoVoice] '
 
         self.prompt = self.colorize(self.colorize(prompt + "Kalliope → ", "bold"), "blue")
 
