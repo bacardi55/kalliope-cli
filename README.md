@@ -3,6 +3,8 @@ A simple shell to send orders to kalliope via the CLI
 
 ![preview](preview.png)
 
+[youtube video](https://youtu.be/cQNnZI4n9BI)
+
 Installation
 
 ```
